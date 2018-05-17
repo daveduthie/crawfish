@@ -1,0 +1,63 @@
+body {
+    background-color: white;
+    color: black;
+    display: grid;
+    grid-auto-columns: minmax(300px, 900px);
+}
+
+h1 {
+    text-align: center;
+}
+
+br {
+    margin: 3em;
+}
+
+a:link, a:visited, a:active {
+    color: #a2a2a2;
+}
+a:hover {
+    color: #38C171;
+}
+
+p {
+    max-width: 75%;
+}
+
+p code, ol code {
+    display: inline;
+}
+
+#wrapper {
+    display: inline-block;
+    margin-top: 1em;
+    min-width: 800px;
+    text-align: left;
+}
+
+.file-diff {
+    border: 1px solid #d8d8d8;
+    margin-bottom: 1em;
+    overflow: auto;
+    padding: 0.5em 0;
+}
+
+.file-diff>div {
+    width: 100%;
+}
+
+.file {
+    color: #aaa;
+}
+
+.delete {
+    background-color: #fdd;
+}
+
+.insert {
+    background-color: #dfd;
+}
+
+.info {
+    color: #a0b;
+}
