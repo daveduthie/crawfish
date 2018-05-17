@@ -243,8 +243,8 @@
 
 (defn show-tree!
   "Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
-  The hierarchy is guessed by segmenting each URL into segments and considering each segment to be
-  a path from the site root to a leaf."
+  The hierarchy is guessed by splitting each URL into segments and treating the resulting
+  sequence as a path from the root."
   [urls]
   (inspect/inspect-tree (->tree urls)))
 

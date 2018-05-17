@@ -3061,8 +3061,8 @@ net.brehaut.ClojureTools = (function (SH) {
     (prn @(wait-for-ack ack seen timeout))
     @seen))</pre></td></tr><tr><td class="docs"><h1>Printing</h1>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
-  The hierarchy is guessed by segmenting each URL into segments and considering each segment to be
-  a path from the site root to a leaf.</p>
+  The hierarchy is guessed by splitting each URL into segments and treating the resulting
+  sequence as a path from the root.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn show-tree!
   [urls]
   (inspect/inspect-tree (-&gt;tree urls)))</pre></td></tr><tr><td class="docs"><p>Accepts a configuration map as produced by <code>parse-opts</code>.
