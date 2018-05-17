@@ -17,8 +17,8 @@
 (deftest absolutise-test
   (let [root "daveduthie.github.io"
         datum "http://daveduthie.github.io"]
-    (is (= datum
-           ((absolutise "http://") root)))))
+    ;; TODO: a better regex would allow a more natural `(absolutise "http://")`
+    (is (= datum ((absolutise "http:/") root)))))
 
 (deftest xform-html-test
   (let [site-root "https://daveduthie.github.io"

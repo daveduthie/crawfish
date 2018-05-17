@@ -16,10 +16,9 @@
 
 ;; REPL use only
 (comment
-  (use 'clojure.repl 'clojure.pprint)
+  (use 'clojure.repl)
   (def monzo "https://monzo.com")
   (def clojars "https://clojars.org/")
-
   )
 
 ;; # Utils
@@ -40,6 +39,8 @@
                               :type      type}))))
 
 ;; # Parsing
+
+;; ## Helpers
 
 (defn page-internal?
   [s]
@@ -93,6 +94,8 @@
   ;; OR
   [:a (enlive/attr? :href)])
 
+;; ## Main parser
+
 (defn xform-html
   "Takes a byte stream representing an HTML page and a transducer to apply to the sequence of URLs found.
   Returns a set of outgoing links."
@@ -124,7 +127,6 @@
 (def sep #"/")
 
 ;; TODO: interpret relative paths in segments ("/../")
-
 (defn tokenise
   [url]
   (into []
@@ -143,6 +145,7 @@
 ;; # Control
 
 (defn re-queue
+  "Pulls URLs from the return queue and pushes them into the work queue."
   [returns ^ConcurrentLinkedQueue work-q seen]
   (go-loop []
     (let [url (<! returns)]
@@ -152,6 +155,8 @@
       (recur))))
 
 (defn wait-for-ack
+  "Keeps track of how many URLs have been seen. Blocks until all have been processed,
+  or until `timeout` ms have elapsed between acks."
   [ack seen timeout]
   (log :debug :ack/types (type ack) (type seen))
   (let [gate (promise)
@@ -173,6 +178,7 @@
 ;; # Workers
 
 (defn proc
+  "Worker process. Polls from the `work-q`, processes URLs, then pushes outgoing links into `returns`."
   [site-root ^ConcurrentLinkedQueue work-q returns ack seen]
   (async/thread ; will block on I/O
     (loop []
@@ -180,11 +186,10 @@
         (let [_    (log :debug :proc/got url)
               urls (->> (outgoing-links url site-root)
                         (remove (conj @seen url)))]
-
           #_ (dosync (commute seen into urls)) ; moved this logic to control
           (log :debug :proc/attempt-to-return url "->" (count urls))
-          ;; (async/onto-chan returns urls false) ; TODO: bring me back
-          (doseq [u urls] (>!! returns u))
+          (async/onto-chan returns urls false) ; TODO: bring me back
+          ;; (doseq [u urls] (>!! returns u))
           ;; Confirm url has been processed
           (>!! ack url)))
       (recur))))
@@ -202,9 +207,11 @@
                x))))
 
 (defn process-all
+  "Sets up some channels and worker threads, then kicks things off by pushing the site-root
+  into the work-queue. Returns a set of all sites discovered."
   [site-root n timeout]
   (let [seen    (ref #{})
-        work-q  (ConcurrentLinkedQueue.)
+        work-q  (ConcurrentLinkedQueue.) ; Want an unbounded queue here to avoid deadlock.
         returns (chan 1 (returns-xform seen))
         ack     (chan 1 (map (fn [x] (log :debug :<-----------ack x) x)))]
     (dosync (commute seen conj site-root))
@@ -217,15 +224,6 @@
 
 ;; # Printing
 
-#_
-(defn print-dir
-  [from tos]
-  (println from " => ")
-  (println ".")
-  (doseq [t (butlast tos)]
-    (println "├──" t))
-  (println "└──" (last tos)))
-
 (defn show-tree!
   "Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
   The hierarchy is guessed by segmenting each URL into segments and considering each segment to be
@@ -234,6 +232,9 @@
   (inspect/inspect-tree (->tree urls)))
 
 (defn scan
+  "Accepts a configuration map as produced by `parse-opts`.
+  Depending on `:display` key, either prints site map to STDOUT
+  or displays an equivalent Swing window."
   [site-root & [{:keys [display parallelism log-level timeout]
                  :or   {display :tree, timeout 5000}}]]
   (let [site-root ((absolutise "http:/") site-root)]
@@ -268,11 +269,14 @@
   (System/exit n))
 
 (defn -main
+  "Entrypoint. Parses options, then calls `scan`."
   [& args]
   (let [{:keys [options arguments summary errors] :as parsed}
         (parse-opts args cli-options)]
-    (cond errors                                  (pr-exit errors 1)
-          (not= 1 (count arguments))              (pr-exit "Please supply exactly one site-root" 1)
-          (or (:help options) (empty? arguments)) (pr-exit summary 0)
-          :else                                   (do (prn :config/ok)
-                                                      (scan (first arguments) options)))))
+    (cond
+      (or (:help options)
+          (empty? arguments))    (pr-exit summary 0)
+      errors                     (pr-exit errors 1)
+      (not= 1 (count arguments)) (pr-exit "Please supply exactly one site-root" 1)
+      :else                      (do (prn :config/ok)
+                                     (scan (first arguments) options)))))

@@ -1,36 +1,39 @@
 # crawfish
 
-FIXME: description
-
 ## Installation
 
-Download from http://example.com/FIXME.
+1. Install a Java JDK
+2. Install Leiningen
+3. Clone the repository
 
 ## Usage
 
-FIXME: explanation
+```
+$ lein run -- [opts] site-root #  `--` tells leiningen to pass args through to -main
 
-    $ java -jar crawfish-0.1.0-standalone.jar [args]
+```
 
-## Options
+Example:
 
-FIXME: listing of options this app accepts.
+```
+lein run -- -d tree daveduthie.github.io
+```
 
-## Examples
+After building a jar (`lein uberjar`), you can run
 
-...
+```
+$ java -jar target/uberjar/crawfish-0.1.0-standalone.jar [args]
+```
 
-### Bugs
+which will shave a bit off boot time.
 
-...
+## Docs
 
-### Any Other Sections
-### That You Think
-### Might be Useful
+They're [here](docs/uberdoc.html).
 
 ## License
 
-Copyright © 2018 FIXME
+Copyright © 2018 David Duthie
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.

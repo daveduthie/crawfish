@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8" content="text/html" http-equiv="Content-Type" /><meta content="FIXME: write description" name="description" /><style type="text/css">/**
+<html><head><meta charset="utf-8" content="text/html" http-equiv="Content-Type" /><meta content="A simple web crawler" name="description" /><style type="text/css">/**
  * SyntaxHighlighter
  * http://alexgorbatchev.com/SyntaxHighlighter
  *
@@ -2865,183 +2865,235 @@ net.brehaut.ClojureTools = (function (SH) {
     build_tree: build_tree
   };
 })(SyntaxHighlighter);
-</script><title>crawfish -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="http://example.com/FIXME">crawfish</a></h1><h2 class="project-version">0.1.0-SNAPSHOT</h2><br /><p>FIXME: write description</p>
-</div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">enlive</td><td class="dotted"><hr /></td><td class="dep-version">1.1.6</td></tr><tr><td class="dep-name">http-kit</td><td class="dotted"><hr /></td><td class="dep-version">2.2.0</td></tr><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.9.0</td></tr><tr><td class="dep-name">org.clojure/core.async</td><td class="dotted"><hr /></td><td class="dep-version">0.4.474</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#crawfish.core">crawfish.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#crawfish.core" name="crawfish.core"><h1 class="project-name">crawfish.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+</script><title>crawfish -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="http://github.com/daveduthie/crawfish">crawfish</a></h1><h2 class="project-version">0.1.0-SNAPSHOT</h2><br /><p>A simple web crawler</p>
+</div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">enlive</td><td class="dotted"><hr /></td><td class="dep-version">1.1.6</td></tr><tr><td class="dep-name">http-kit</td><td class="dotted"><hr /></td><td class="dep-version">2.2.0</td></tr><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.9.0</td></tr><tr><td class="dep-name">org.clojure/core.async</td><td class="dotted"><hr /></td><td class="dep-version">0.4.474</td></tr><tr><td class="dep-name">org.clojure/tools.cli</td><td class="dotted"><hr /></td><td class="dep-version">0.3.7</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#crawfish.core">crawfish.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#crawfish.core" name="crawfish.core"><h1 class="project-name">crawfish.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns crawfish.core
   (:require
-   [org.httpkit.client :as kit]
-   [net.cgrand.enlive-html :as enlive]
+   [clojure.core.async :as async :refer [&lt;! &lt;!! &gt;! &gt;!! alts! chan go go-loop]]
+   [clojure.inspector :as inspect]
+   [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
    [clojure.string :as str]
-   [clojure.core.async :as async
-    :refer [put! &gt;! &gt;!! &lt;! &lt;!! go go-loop chan]]
-   [clojure.java.io :as io])
+   [clojure.tools.cli :refer [parse-opts]]
+   [net.cgrand.enlive-html :as enlive]
+   [org.httpkit.client :as kit])
   (:import
    [java.util.concurrent ConcurrentLinkedQueue])
-  (:gen-class))</pre></td></tr><tr><td class="docs"><p>REPL use only</p>
+  (:gen-class))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(set! *warn-on-reflection* true)</pre></td></tr><tr><td class="docs"><p>REPL use only</p>
 </td><td class="codes"><pre class="brush: clojure">(comment
-  (use 'clojure.repl 'clojure.pprint)
+  (use 'clojure.repl)
   (def monzo &quot;https://monzo.com&quot;)
-  (defonce fetched-monzo (:body @(kit/get monzo)))
-  (def pages &quot;https://daveduthie.github.io&quot;)
-  (defonce fetched-pages (:body @(kit/get monzo))))</pre></td></tr><tr><td class="docs"><h1>Utils</h1>
+  (def clojars &quot;https://clojars.org/&quot;))</pre></td></tr><tr><td class="docs"><h1>Utils</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(def logger (agent nil))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn log [&amp; msgs]
-  (send logger (fn [_] (apply println msgs))))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(def logger (agent nil))
+(def levels {:debug 0 :info 1 :warn 2 :error 3 :fatal 4})
+(def ^:dynamic *log-level* :info)</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn log [level &amp; msgs]
+  (when (&gt;= (levels level 0) (levels *log-level* 2))
+    (send logger (fn [_] (apply println msgs)))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn mk-ex
   [condition val]
   (when-not (condition val)
-    (throw (ex-info &quot;failed&quot; {:conition condition
-                              :value    val
-                              :type     type}))))</pre></td></tr><tr><td class="docs"><hr />
+    (throw (ex-info &quot;failed&quot; {:condition condition
+                              :value     val
+                              :type      type}))))</pre></td></tr><tr><td class="docs"><h1>Parsing</h1>
+</td><td class="codes"></td></tr><tr><td class="docs"><h2>Helpers</h2>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">#_
-(defn string-&gt;enlive
-  &quot;Transforms a stringified HTML page into Enlive's internal representation.&quot;
-  [s]
-  (mk-ex string? s)
-  (enlive/html-resource
-   (io/input-stream (.getBytes s))))
-;; Parsing
-(defn relative?
-  [s]
-  ;; TODO: write me 2018-05-16 13:20)</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn page-internal?
   [s]
   (str/starts-with? s &quot;#&quot;))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn absolute?
   [s]
   ;; TODO: corner cases?
-  #_ (re-find #&quot;http&quot; s)
+  ;; TODO: identify urls of the form //cdn.x.y
   (str/starts-with? s &quot;http&quot;))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn external?
+  [site-root]
+  (fn [s]
+    (and (absolute? s)
+         (not (str/starts-with? s site-root)))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn mailto?
   [s]
   (str/starts-with? s &quot;mailto&quot;))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn tel?
   [s]
-  (str/starts-with? s &quot;tel&quot;))</pre></td></tr><tr><td class="docs">
+  (str/starts-with? s &quot;tel&quot;))</pre></td></tr><tr><td class="docs"><p>TODO: update this 2018-05-17 10:22</p>
 </td><td class="codes"><pre class="brush: clojure">(defn ignore?
   [s]
   (or (absolute? s)
       (mailto? s)
       (tel? s)
       (page-internal? s)))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn has-slash?
+</td><td class="codes"><pre class="brush: clojure">(defn remove-extra-slashes
   [s]
-  (str/starts-with? s &quot;/&quot;))</pre></td></tr><tr><td class="docs">
+  (str/replace s #&quot;(?&lt;![:/])/+&quot; &quot;/&quot;))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn absolutise [root]
   (fn [url]
-    (str root (when-not (has-slash? url) &quot;/&quot;) url)))</pre></td></tr><tr><td class="docs">
+    (remove-extra-slashes
+     (if (absolute? url)
+       url
+       (str root &quot;/&quot; url)))))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn strip-query-params
+  [s]
+  (str/replace s #&quot;(\?).*&quot; ))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def href-sel
-  ;; (enlive/attr? :href)
+  #_ (enlive/attr? :href)
   ;; OR
-  [:a (enlive/attr? :href)])</pre></td></tr><tr><td class="docs"><p>Takes a byte stream representing an HTML page and a transducer to apply to URLs found.
+  [:a (enlive/attr? :href)])</pre></td></tr><tr><td class="docs"><h2>Main parser</h2>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>Takes a byte stream representing an HTML page and a transducer to apply to the sequence of URLs found.
   Returns a set of outgoing links.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn xform-html
   [byte-stream xform]
-  (try (-&gt; byte-stream
-           enlive/html-resource
-           (enlive/select [href-sel])
-           (-&gt;&gt; (map #(get-in % [:attrs :href]))
-                (into #{} xform)))))</pre></td></tr><tr><td class="docs"><p>Takes a URL and a site-root, and returns a set of outgoing links.</p>
-</td><td class="codes"><pre class="brush: clojure">#_
-(xform-html fetched-monzo (comp (remove absolute?)
-                                (remove mailto?)
-                                (remove tel?)
-                                (map (absolutise monzo))))
-(defn outgoing-links
+  (-&gt; byte-stream
+      enlive/html-resource
+      (enlive/select [href-sel])
+      (-&gt;&gt; (map #(get-in % [:attrs :href]))
+           (into #{} xform))))</pre></td></tr><tr><td class="docs"><p>Takes a URL and a site-root, and returns a set of outgoing links.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn outgoing-links
   [url site-root]
   ;; TODO: experiment with callback API
-  (-&gt; @(kit/get url {:as :stream})
-      :body
-      (xform-html (comp (remove absolute?)
-                        (remove mailto?)
-                        (remove tel?)
-                        (remove page-internal?)
-                        (map (absolutise site-root))))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>
+  (try 
+    (-&gt; @(kit/get url {:as :stream})
+        :body
+        (xform-html (comp (remove absolute?)
+                          (remove mailto?)
+                          (remove tel?)
+                          (remove page-internal?)
+                          (map strip-query-params)
+                          (map (absolutise site-root)))))
+    (catch IllegalArgumentException e
+      (log :warn (format &quot;failed to fetch %s&quot; url)))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(def sep #&quot;/&quot;)</pre></td></tr><tr><td class="docs"><p>(def url "https://daveduthie.github.io/static/images/favicon.png")
-(def url2 "https://daveduthie.github.io/static/images/foo.png")
-(def url3 "https://daveduthie.github.io/articles/yo-ho-ho")</p>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>(into []
-      (comp (remove empty?)
-            (remove protocol?))
-      (str/split url sep'))</p>
-</td><td class="codes"></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(def sep #&quot;/&quot;)</pre></td></tr><tr><td class="docs"><p>TODO: interpret relative paths in segments ("/../")</p>
 </td><td class="codes"><pre class="brush: clojure">(defn tokenise
   [url]
-  (into [] (comp (remove empty?)
-                 (remove ignore?))
+  (into []
+        (comp (remove empty?) (remove ignore?))
         (str/split url sep)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn deep-merge
   [m url]
   (let [path (tokenise url)]
-    ;; (prn :path path)
-    ;; (pprint m)
     (update-in m path #(or % {}))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn -&gt;tree
   [links]
   (reduce deep-merge {} links))</pre></td></tr><tr><td class="docs"><h1>Control</h1>
-</td><td class="codes"></td></tr><tr><td class="docs">
+</td><td class="codes"></td></tr><tr><td class="docs"><p>Pulls URLs from the return queue and pushes them into the work queue.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn re-queue
-  [returns work-q seen]
+  [returns ^ConcurrentLinkedQueue work-q seen]
   (go-loop []
     (let [url (&lt;! returns)]
       (assert url)
       (dosync (commute seen conj url))
-      (put! work-q url) ; don't respect back-pressure here (need growing buffer *somewhere*)
-      (recur))))</pre></td></tr><tr><td class="docs">
+      (.add work-q url) ; don't respect back-pressure here (need growing buffer *somewhere*)
+      (recur))))</pre></td></tr><tr><td class="docs"><p>Keeps track of how many URLs have been seen. Blocks until all have been processed,
+  or until <code>timeout</code> ms have elapsed between acks.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn wait-for-ack
-  [ack seen]
+  [ack seen timeout]
+  (log :debug :ack/types (type ack) (type seen))
   (let [gate (promise)
         _    (go-loop [i 1]
-               #_ (log :waiting-for-ack i)
-               #_ (log :acked i (&lt;! ack))
-               (if (&lt; i (count @seen))
-                 (do (log i :ack/&lt;= (count @seen))
-                     (recur (inc i)))
-                 (deliver gate :acks-complete!)))]
+               (log :debug :waiting-for-ack i)
+               (let [[url port] (alts! [ack (async/timeout timeout)])]
+                 (log :debug :ack/url url :ack/port port)
+                 (cond
+                   (= i (count @seen)) (deliver gate {:acks/complete true
+                                                      :acks/received i
+                                                      :acks/expected (count @seen)})
+                   (not= port ack)     (deliver gate {:acks/complete false
+                                                      :acks/received i
+                                                      :acks/expected (count @seen)})
+                   :else               (do (log :info (format &quot;ack (%d / %d) %20s...&quot; i (count @seen) url ))
+                                           (recur (inc i))))))]
     gate))</pre></td></tr><tr><td class="docs"><h1>Workers</h1>
-</td><td class="codes"></td></tr><tr><td class="docs">
+</td><td class="codes"></td></tr><tr><td class="docs"><p>Worker process. Polls from the <code>work-q</code>, processes URLs, then pushes outgoing links into <code>returns</code>.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn proc
-  [site-root work-q returns ack seen]
+  [site-root ^ConcurrentLinkedQueue work-q returns ack seen]
   (async/thread ; will block on I/O
     (loop []
-      (let [url  (&lt;!! work-q)
-            urls (-&gt;&gt; (outgoing-links url site-root)
-                      (remove (conj @seen url)))]
-        ;; (dosync (commute seen into urls)) ; moved this logic to control
-        (log :proc/attempt-to-return url &quot;-&gt;&quot; (count urls))
-        ;; (async/onto-chan returns urls false) ; TODO: bring me back
-        (doseq [u urls] (&gt;!! returns u))
-        ;; Confirm url has been processed
-        (&gt;!! ack url)
-        (recur)))))</pre></td></tr><tr><td class="docs"><h1>Wiring</h1>
-</td><td class="codes"></td></tr><tr><td class="docs">
+      (when-let [url (.poll work-q)]
+        (let [_    (log :debug :proc/got url)
+              urls (-&gt;&gt; (outgoing-links url site-root)
+                        (remove (conj @seen url)))]
+          #_ (dosync (commute seen into urls)) ; moved this logic to control
+          (log :debug :proc/attempt-to-return url &quot;-&gt;&quot; (count urls))
+          (async/onto-chan returns urls false) ; TODO: bring me back
+          ;; (doseq [u urls] (&gt;!! returns u))
+          ;; Confirm url has been processed
+          (&gt;!! ack url)))
+      (recur))))</pre></td></tr><tr><td class="docs"><h1>Wiring</h1>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>Prevents URLs which have already been seen from being put onto the returns chan
+  and registers each new URL as it is encountered.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn returns-xform
+  [seen]
+  (comp (distinct)
+        (map (fn [x]
+               (dosync (commute seen conj))
+               (log :debug :&lt;-----------returns x)
+               x))))</pre></td></tr><tr><td class="docs"><p>Sets up some channels and worker threads, then kicks things off by pushing the site-root
+  into the work-queue. Returns a set of all sites discovered.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn process-all
-  [site-root n]
+  [site-root n timeout]
   (let [seen    (ref #{})
-        work-q  (chan 1000 (map (fn [x] (log ::-&gt;work-q x) x)))
-        returns (chan 10 (map (fn [x] (log ::-&gt;returns x) x)))
-        ack     (chan 10 (map (fn [x] (log ::-&gt;ack x) x)))]
+        work-q  (ConcurrentLinkedQueue.) ; Want an unbounded queue here to avoid deadlock.
+        returns (chan 1 (returns-xform seen))
+        ack     (chan 1 (map (fn [x] (log :debug :&lt;-----------ack x) x)))]
     (dosync (commute seen conj site-root))
-    (put! work-q site-root)
+    (.add work-q site-root)
     (re-queue returns work-q seen)
     (dotimes [i n]
       (proc site-root work-q returns ack seen))
-    @(wait-for-ack ack seen)
+    (prn @(wait-for-ack ack seen timeout))
     @seen))</pre></td></tr><tr><td class="docs"><h1>Printing</h1>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
+  The hierarchy is guessed by segmenting each URL into segments and considering each segment to be
+  a path from the site root to a leaf.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn show-tree!
+  [urls]
+  (inspect/inspect-tree (-&gt;tree urls)))</pre></td></tr><tr><td class="docs"><p>Accepts a configuration map as produced by <code>parse-opts</code>.
+  Depending on <code>:display</code> key, either prints site map to STDOUT
+  or displays an equivalent Swing window.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn scan
+  [site-root &amp; [{:keys [display parallelism log-level timeout]
+                 :or   {display :tree, timeout 5000}}]]
+  (let [site-root ((absolutise &quot;http:/&quot;) site-root)]
+    (case display
+      :tree (show-tree! (process-all site-root parallelism timeout))
+      :edn  (pprint (-&gt;tree (process-all site-root parallelism timeout))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn print-dir
-  [from tos]
-  (println from &quot; =&gt; &quot;)
-  (println &quot;.&quot;)
-  (doseq [t (butlast tos)]
-    (println &quot;├──&quot; t))
-  (println &quot;└──&quot; (last tos)))</pre></td></tr><tr><td class="docs"><p>I don't do a whole lot ... yet.</p>
+</td><td class="codes"><pre class="brush: clojure">(def cli-options
+  [[&quot;-p&quot; &quot;--parallelism P&quot; &quot;Number of I/O threads to use&quot;
+    :default 8
+    :parse-fn #(Integer/parseInt %)
+    :validate [#(&lt; 1 % 64) &quot;Must be a number between 1 and 64&quot;]]
+   [&quot;-l&quot; &quot;--log-level L&quot; &quot;Logging level&quot;
+    :default :info
+    :parse-fn keyword
+    :validate [#{:debug :info :warn :error :fatal}]]
+   [&quot;-t&quot; &quot;--timeout T&quot; &quot;Max milliseconds between ACKs&quot;
+    :default 10000
+    :parse-fn #(Integer/parseInt %)
+    :validate [#(&lt; 500 % 20000) &quot;Must be a number between 500 and 20000&quot;]]
+   [&quot;-d&quot; &quot;--display D&quot; &quot;Display type (tree or EDN)&quot;
+    :default :edn
+    :parse-fn keyword
+    :validate [#{:tree :edn} &quot;Must be one of tree or edn&quot;]]
+   [&quot;-h&quot; &quot;--help&quot;]])</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn pr-exit
+  [msg n]
+  (println msg)
+  (System/exit n))</pre></td></tr><tr><td class="docs"><p>Entrypoint. Parses options, then calls <code>scan</code>.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn -main
   [&amp; args]
-  (println &quot;Hello, World!&quot;))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/gdeer81/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_crawfish.core">crawfish.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+  (let [{:keys [options arguments summary errors] :as parsed}
+        (parse-opts args cli-options)]
+    (cond
+      (or (:help options)
+          (empty? arguments))    (pr-exit summary 0)
+      errors                     (pr-exit errors 1)
+      (not= 1 (count arguments)) (pr-exit &quot;Please supply exactly one site-root&quot; 1)
+      :else                      (do (prn :config/ok)
+                                     (scan (first arguments) options)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/gdeer81/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_crawfish.core">crawfish.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
 SyntaxHighlighter.all();
 
 // hackity hack
