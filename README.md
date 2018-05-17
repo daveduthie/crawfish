@@ -5,6 +5,7 @@
 1. Install a Java JDK
 2. Install Leiningen
 3. Clone the repository
+4. Run the tests: `lein test`
 
 ## Usage
 
