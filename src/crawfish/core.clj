@@ -78,6 +78,18 @@
   [s]
   (str/replace s #"(?<![:/])/+" "/"))
 
+(defn strip-query-params
+  [s]
+  (str/replace s #"(\?).*" ""))
+
+(defn strip-internal-links
+  [s]
+  (str/replace s #"#.*" ""))
+
+(defn strip-trailing-slashes
+  [s]
+  (str/replace s #"/+$" ""))
+
 (defn absolutise [root]
   (fn [url]
     (remove-extra-slashes
@@ -85,9 +97,6 @@
        url
        (str root "/" url)))))
 
-(defn strip-query-params
-  [s]
-  (str/replace s #"(\?).*" ""))
 
 (def href-sel
   #_ (enlive/attr? :href)
@@ -113,11 +122,13 @@
   (try 
     (-> @(kit/get url {:as :stream})
         :body
-        (xform-html (comp (remove absolute?)
+        (xform-html (comp (remove page-internal?)
+                          (remove absolute?)
                           (remove mailto?)
                           (remove tel?)
-                          (remove page-internal?)
                           (map strip-query-params)
+                          (map strip-internal-links)
+                          (map strip-trailing-slashes)
                           (map (absolutise site-root)))))
     (catch IllegalArgumentException e
       (log :warn (format "failed to fetch %s" url)))))

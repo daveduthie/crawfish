@@ -2928,15 +2928,21 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(defn remove-extra-slashes
   [s]
   (str/replace s #&quot;(?&lt;![:/])/+&quot; &quot;/&quot;))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn strip-query-params
+  [s]
+  (str/replace s #&quot;(\?).*&quot; ))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn strip-internal-links
+  [s]
+  (str/replace s #&quot;#.*&quot; ))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn strip-trailing-slashes
+  [s]
+  (str/replace s #&quot;/+$&quot; ))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn absolutise [root]
   (fn [url]
     (remove-extra-slashes
      (if (absolute? url)
        url
        (str root &quot;/&quot; url)))))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn strip-query-params
-  [s]
-  (str/replace s #&quot;(\?).*&quot; ))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def href-sel
   #_ (enlive/attr? :href)
   ;; OR
@@ -2956,11 +2962,13 @@ net.brehaut.ClojureTools = (function (SH) {
   (try 
     (-&gt; @(kit/get url {:as :stream})
         :body
-        (xform-html (comp (remove absolute?)
+        (xform-html (comp (remove page-internal?)
+                          (remove absolute?)
                           (remove mailto?)
                           (remove tel?)
-                          (remove page-internal?)
                           (map strip-query-params)
+                          (map strip-internal-links)
+                          (map strip-trailing-slashes)
                           (map (absolutise site-root)))))
     (catch IllegalArgumentException e
       (log :warn (format &quot;failed to fetch %s&quot; url)))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>

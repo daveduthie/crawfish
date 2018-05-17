@@ -20,6 +20,25 @@
     ;; TODO: a better regex would allow a more natural `(absolutise "http://")`
     (is (= datum ((absolutise "http:/") root)))))
 
+(deftest transducer-test
+  (let [site-root "http://foo.bar"
+        xform     (comp (remove page-internal?)
+                        (remove absolute?)
+                        (remove mailto?)
+                        (remove tel?)
+                        (map strip-query-params)
+                        (map strip-internal-links)
+                        (map strip-trailing-slashes)
+                        (map (absolutise site-root)))
+        urls      ["http://remove.me.bar"
+                   "/a"
+                   "/b/"
+                   "/c#d"]
+        datum     ["http://foo.bar/a"
+                   "http://foo.bar/b"
+                   "http://foo.bar/c"]]
+    (is (= datum (into [] xform urls)))))
+
 (deftest xform-html-test
   (let [site-root "https://daveduthie.github.io"
         stream    (io/input-stream (io/resource "David Duthie.html"))
