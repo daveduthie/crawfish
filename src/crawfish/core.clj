@@ -253,9 +253,10 @@
   Depending on `:display` key, either prints site map to STDOUT
   or displays an equivalent Swing window."
   [site-root & [{:keys [display parallelism log-level timeout]
-                 :or   {display :tree, timeout 5000}}]]
+                 :or   {display :edn, parallelism 8, log-level :info timeout 5000}}]]
   (binding [*log-level* log-level]
     (let [site-root ((absolutise "http:/") site-root)]
+      (log :info :root site-root)
       (case display
         :tree (show-tree! (process-all site-root parallelism timeout))
         :edn  (pprint (->tree (process-all site-root parallelism timeout)))))))

@@ -3070,9 +3070,10 @@ net.brehaut.ClojureTools = (function (SH) {
   or displays an equivalent Swing window.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn scan
   [site-root &amp; [{:keys [display parallelism log-level timeout]
-                 :or   {display :tree, timeout 5000}}]]
+                 :or   {display :edn, parallelism 8, log-level :info timeout 5000}}]]
   (binding [*log-level* log-level]
     (let [site-root ((absolutise &quot;http:/&quot;) site-root)]
+      (log :info :root site-root)
       (case display
         :tree (show-tree! (process-all site-root parallelism timeout))
         :edn  (pprint (-&gt;tree (process-all site-root parallelism timeout)))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
