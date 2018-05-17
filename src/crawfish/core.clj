@@ -90,13 +90,19 @@
   [s]
   (str/replace s #"/+$" ""))
 
+(defn interpret-relative-links
+  [s]
+  (let [interp (str/replace s #"/\w+/../" "/")]
+    (if (and (not= interp s) (re-find #"\.\." interp))
+      (interpret-relative-links interp)
+      interp)))
+
 (defn absolutise [root]
   (fn [url]
     (remove-extra-slashes
      (if (absolute? url)
        url
        (str root "/" url)))))
-
 
 (def href-sel
   #_ (enlive/attr? :href)
@@ -129,6 +135,7 @@
                           (map strip-query-params)
                           (map strip-internal-links)
                           (map strip-trailing-slashes)
+                          (map interpret-relative-links)
                           (map (absolutise site-root)))))
     (catch IllegalArgumentException e
       (log :warn (format "failed to fetch %s" url)))))
@@ -137,7 +144,6 @@
 
 (def sep #"/")
 
-;; TODO: interpret relative paths in segments ("/../")
 (defn tokenise
   [url]
   (into []

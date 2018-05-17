@@ -20,6 +20,16 @@
     ;; TODO: a better regex would allow a more natural `(absolutise "http://")`
     (is (= datum ((absolutise "http:/") root)))))
 
+(deftest interpret-relative-links-test
+  (testing "valid relative links"
+    (let [url   "http://daveduthie.github.io/foo/doo/../../bar/../yo"
+          datum "http://daveduthie.github.io/yo"]
+      (is (= datum (interpret-relative-links url)))))
+  (testing "invalid (?) relative links"
+    (let [url   "http://daveduthie.github.io/../yo"
+          datum "http://daveduthie.github.io/../yo"]
+      (is (= datum (interpret-relative-links url))))))
+
 (deftest transducer-test
   (let [site-root "http://foo.bar"
         xform     (comp (remove page-internal?)
@@ -29,14 +39,17 @@
                         (map strip-query-params)
                         (map strip-internal-links)
                         (map strip-trailing-slashes)
+                        (map interpret-relative-links)
                         (map (absolutise site-root)))
         urls      ["http://remove.me.bar"
                    "/a"
                    "/b/"
-                   "/c#d"]
+                   "/c#d"
+                   "e/f/../g"]
         datum     ["http://foo.bar/a"
                    "http://foo.bar/b"
-                   "http://foo.bar/c"]]
+                   "http://foo.bar/c"
+                   "http://foo.bar/e/g"]]
     (is (= datum (into [] xform urls)))))
 
 (deftest xform-html-test

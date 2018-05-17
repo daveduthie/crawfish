@@ -2937,6 +2937,12 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(defn strip-trailing-slashes
   [s]
   (str/replace s #&quot;/+$&quot; ))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn interpret-relative-links
+  [s]
+  (let [interp (str/replace s #&quot;/\w+/../&quot; &quot;/&quot;)]
+    (if (re-find #&quot;\.\.&quot; interp)
+      (interpret-relative-links interp)
+      interp)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn absolutise [root]
   (fn [url]
     (remove-extra-slashes
@@ -2969,11 +2975,12 @@ net.brehaut.ClojureTools = (function (SH) {
                           (map strip-query-params)
                           (map strip-internal-links)
                           (map strip-trailing-slashes)
+                          (map interpret-relative-links)
                           (map (absolutise site-root)))))
     (catch IllegalArgumentException e
       (log :warn (format &quot;failed to fetch %s&quot; url)))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(def sep #&quot;/&quot;)</pre></td></tr><tr><td class="docs"><p>TODO: interpret relative paths in segments ("/../")</p>
+</td><td class="codes"><pre class="brush: clojure">(def sep #&quot;/&quot;)</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn tokenise
   [url]
   (into []
