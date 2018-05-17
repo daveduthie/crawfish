@@ -9,7 +9,17 @@
   (is (= (strip-query-params "foo.bar.com/yeah?foo=2&y=not")
          "foo.bar.com/yeah")))
 
-;; (enlive/html-resource)
+(deftest remove-extra-slashes-test
+  (is (= "https://clojars.org/cljsjs/react-ultimate-pagination"
+         (remove-extra-slashes
+          "https://clojars.org//cljsjs/react-ultimate-pagination"))))
+
+(deftest absolutise-test
+  (let [root "daveduthie.github.io"
+        datum "http://daveduthie.github.io"]
+    (is (= datum
+           ((absolutise "http://") root)))))
+
 (deftest xform-html-test
   (let [site-root "https://daveduthie.github.io"
         stream    (io/input-stream (io/resource "David Duthie.html"))
@@ -33,7 +43,12 @@
                              (map strip-query-params)
                              (map (absolutise site-root))))))))
 
-(deftest remove-extra-slashes-test
-  (is (= "https://clojars.org/cljsjs/react-ultimate-pagination"
-         (remove-extra-slashes
-          "https://clojars.org//cljsjs/react-ultimate-pagination"))))
+(deftest ->tree-test
+  (let [links #{"https://foo.github.io/static/images/favicon.png"
+                "https://foo.github.io/static/images/foo.png"
+                "https://foo.github.io/articles/yo-ho-ho"}
+        datum {"foo.github.io" {"articles" {"yo-ho-ho" {}},
+                                "static"   {"images" {"favicon.png" {},
+                                                      "foo.png"     {}}}}}]
+    (is (= datum 
+           (->tree links)))))

@@ -1,14 +1,18 @@
 (ns crawfish.core
   (:require
-   [clojure.core.async :as async :refer [put! >! >!! <! <!! go go-loop chan]]
+   [clojure.core.async :as async :refer [<! <!! >! >!! alts! chan go go-loop]]
    [clojure.inspector :as inspect]
    [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
    [clojure.string :as str]
+   [clojure.tools.cli :refer [parse-opts]]
    [net.cgrand.enlive-html :as enlive]
    [org.httpkit.client :as kit])
   (:import
    [java.util.concurrent ConcurrentLinkedQueue])
   (:gen-class))
+
+(set! *warn-on-reflection* true)
 
 ;; REPL use only
 (comment
@@ -22,7 +26,7 @@
 
 (def logger (agent nil))
 (def levels {:debug 0 :info 1 :warn 2 :error 3 :fatal 4})
-(def ^:dynamic *log-level* :warn)
+(def ^:dynamic *log-level* :info)
 
 (defn log [level & msgs]
   (when (>= (levels level 0) (levels *log-level* 2))
@@ -37,8 +41,6 @@
 
 ;; # Parsing
 
-;; TODO: strip query parameters from URLs
-
 (defn page-internal?
   [s]
   (str/starts-with? s "#"))
@@ -47,7 +49,6 @@
   [s]
   ;; TODO: corner cases?
   ;; TODO: identify urls of the form //cdn.x.y
-  #_ (re-find #"http" s)
   (str/starts-with? s "http"))
 
 (defn external?
@@ -71,17 +72,6 @@
       (mailto? s)
       (tel? s)
       (page-internal? s)))
-
-;; TODO: rename -> begin-slash?
-(defn has-slash?
-  [s]
-  (prn :has-slash? s)
-  (doto (str/starts-with? s "/")
-    prn))
-
-(defn end-slash?
-  [s]
-  (str/ends-with? s "/"))
 
 (defn remove-extra-slashes
   [s]
@@ -107,38 +97,31 @@
   "Takes a byte stream representing an HTML page and a transducer to apply to the sequence of URLs found.
   Returns a set of outgoing links."
   [byte-stream xform]
-  (try (-> byte-stream
-           enlive/html-resource
-           (enlive/select [href-sel])
-           (->> (map #(get-in % [:attrs :href]))
-                (into #{} xform)))))
+  (-> byte-stream
+      enlive/html-resource
+      (enlive/select [href-sel])
+      (->> (map #(get-in % [:attrs :href]))
+           (into #{} xform))))
 
 (defn outgoing-links
   "Takes a URL and a site-root, and returns a set of outgoing links."
   [url site-root]
   ;; TODO: experiment with callback API
-  (-> @(kit/get url {:as :stream})
-      :body
-      ;; TODO: use ignore? as predicate
-      (xform-html (comp (remove absolute?)
-                        (remove mailto?)
-                        (remove tel?)
-                        (remove page-internal?)
-                        (map strip-query-params)
-                        (map (absolutise site-root))))))
+  (try 
+    (-> @(kit/get url {:as :stream})
+        :body
+        (xform-html (comp (remove absolute?)
+                          (remove mailto?)
+                          (remove tel?)
+                          (remove page-internal?)
+                          (map strip-query-params)
+                          (map (absolutise site-root)))))
+    (catch IllegalArgumentException e
+      (log :warn (format "failed to fetch %s" url)))))
 
 ;; # Hierarchical (tree) representation
 
 (def sep #"/")
-
-;; (def url "https://daveduthie.github.io/static/images/favicon.png")
-;; (def url2 "https://daveduthie.github.io/static/images/foo.png")
-;; (def url3 "https://daveduthie.github.io/articles/yo-ho-ho")
-
-;; (into []
-;;       (comp (remove empty?)
-;;             (remove protocol?))
-;;       (str/split url sep'))
 
 ;; TODO: interpret relative paths in segments ("/../")
 
@@ -160,7 +143,7 @@
 ;; # Control
 
 (defn re-queue
-  [returns work-q seen]
+  [returns ^ConcurrentLinkedQueue work-q seen]
   (go-loop []
     (let [url (<! returns)]
       (assert url)
@@ -169,22 +152,28 @@
       (recur))))
 
 (defn wait-for-ack
-  [ack seen]
+  [ack seen timeout]
+  (log :debug :ack/types (type ack) (type seen))
   (let [gate (promise)
         _    (go-loop [i 1]
                (log :debug :waiting-for-ack i)
-               (<! ack)
-               (if (= i (count @seen))
-                 (do (log :debug i :ack/done (count @seen))
-                     (deliver gate :acks-complete!))
-                 (do (log :warn i :ack/< (count @seen))
-                     (recur (inc i)))))]
+               (let [[url port] (alts! [ack (async/timeout timeout)])]
+                 (log :debug :ack/url url :ack/port port)
+                 (cond
+                   (= i (count @seen)) (deliver gate {:acks/complete true
+                                                      :acks/received i
+                                                      :acks/expected (count @seen)})
+                   (not= port ack)     (deliver gate {:acks/complete false
+                                                      :acks/received i
+                                                      :acks/expected (count @seen)})
+                   :else               (do (log :info (format "ack (%d / %d) %20s..." i (count @seen) url ))
+                                           (recur (inc i))))))]
     gate))
 
 ;; # Workers
 
 (defn proc
-  [site-root work-q returns ack seen]
+  [site-root ^ConcurrentLinkedQueue work-q returns ack seen]
   (async/thread ; will block on I/O
     (loop []
       (when-let [url (.poll work-q)]
@@ -192,7 +181,7 @@
               urls (->> (outgoing-links url site-root)
                         (remove (conj @seen url)))]
 
-          ;; (dosync (commute seen into urls)) ; moved this logic to control
+          #_ (dosync (commute seen into urls)) ; moved this logic to control
           (log :debug :proc/attempt-to-return url "->" (count urls))
           ;; (async/onto-chan returns urls false) ; TODO: bring me back
           (doseq [u urls] (>!! returns u))
@@ -209,26 +198,26 @@
   (comp (distinct)
         (map (fn [x]
                (dosync (commute seen conj))
-               (log :info :<-----------returns x)
+               (log :debug :<-----------returns x)
                x))))
 
 (defn process-all
-  [site-root n]
-  (let [ seen    (ref #{})
+  [site-root n timeout]
+  (let [seen    (ref #{})
         work-q  (ConcurrentLinkedQueue.)
-        #_      (chan 10 (map (fn [x] (log :info :----------->work-q x) x)))
         returns (chan 1 (returns-xform seen))
-        ack     (chan 1 (map (fn [x] (log :info :<-----------ack x) x)))]
+        ack     (chan 1 (map (fn [x] (log :debug :<-----------ack x) x)))]
     (dosync (commute seen conj site-root))
     (.add work-q site-root)
     (re-queue returns work-q seen)
     (dotimes [i n]
       (proc site-root work-q returns ack seen))
-    (prn @(wait-for-ack ack seen))
+    (prn @(wait-for-ack ack seen timeout))
     @seen))
 
 ;; # Printing
 
+#_
 (defn print-dir
   [from tos]
   (println from " => ")
@@ -237,11 +226,53 @@
     (println "├──" t))
   (println "└──" (last tos)))
 
+(defn show-tree!
+  "Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
+  The hierarchy is guessed by segmenting each URL into segments and considering each segment to be
+  a path from the site root to a leaf."
+  [urls]
+  (inspect/inspect-tree (->tree urls)))
 
-#_
-(inspect/inspect-tree (->tree (process-all clojars 10)))
+(defn scan
+  [site-root & [{:keys [display parallelism log-level timeout]
+                 :or   {display :tree, timeout 5000}}]]
+  (let [site-root ((absolutise "http:/") site-root)]
+    (case display
+      :tree (show-tree! (process-all site-root parallelism timeout))
+      :edn  (pprint (->tree (process-all site-root parallelism timeout))))))
+
+;; # CLI options
+
+(def cli-options
+  [["-p" "--parallelism P" "Number of I/O threads to use"
+    :default 8
+    :parse-fn #(Integer/parseInt %)
+    :validate [#(< 1 % 64) "Must be a number between 1 and 64"]]
+   ["-l" "--log-level L" "Logging level"
+    :default :info
+    :parse-fn keyword
+    :validate [#{:debug :info :warn :error :fatal}]]
+   ["-t" "--timeout T" "Max milliseconds between ACKs"
+    :default 10000
+    :parse-fn #(Integer/parseInt %)
+    :validate [#(< 500 % 20000) "Must be a number between 500 and 20000"]]
+   ["-d" "--display D" "Display type (tree or EDN)"
+    :default :edn
+    :parse-fn keyword
+    :validate [#{:tree :edn} "Must be one of tree or edn"]]
+   ["-h" "--help"]])
+
+(defn pr-exit
+  [msg n]
+  (println msg)
+  (System/exit n))
 
 (defn -main
-  "I don't do a whole lot ... yet."
   [& args]
-  (println "Hello, World!"))
+  (let [{:keys [options arguments summary errors] :as parsed}
+        (parse-opts args cli-options)]
+    (cond errors                                  (pr-exit errors 1)
+          (not= 1 (count arguments))              (pr-exit "Please supply exactly one site-root" 1)
+          (or (:help options) (empty? arguments)) (pr-exit summary 0)
+          :else                                   (do (prn :config/ok)
+                                                      (scan (first arguments) options)))))
