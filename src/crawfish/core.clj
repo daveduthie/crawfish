@@ -22,7 +22,7 @@
 
 (def logger (agent nil))
 (def levels {:debug 0 :info 1 :warn 2 :error 3 :fatal 4})
-(def ^:dynamic *log-level* :info)
+(def ^:dynamic *log-level* :warn)
 
 (defn log [level & msgs]
   (when (>= (levels level 0) (levels *log-level* 2))
@@ -214,14 +214,11 @@
 
 (defn process-all
   [site-root n]
-  (let [ctr     (atom 0)
-        seen    (ref #{})
+  (let [ seen    (ref #{})
         work-q  (ConcurrentLinkedQueue.)
         #_      (chan 10 (map (fn [x] (log :info :----------->work-q x) x)))
         returns (chan 1 (returns-xform seen))
-        ack     (chan 1 (map (fn [x]
-                               (log :warn :ack-ctr (swap! ctr inc))
-                               (log :info :<-----------ack x) x)))]
+        ack     (chan 1 (map (fn [x] (log :info :<-----------ack x) x)))]
     (dosync (commute seen conj site-root))
     (.add work-q site-root)
     (re-queue returns work-q seen)

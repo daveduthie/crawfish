@@ -8,6 +8,7 @@
                  [org.clojure/clojure "1.9.0"]
                  [org.clojure/core.async "0.4.474"]]
   :main ^:skip-aot crawfish.core
+  :plugins [[lein-marginalia "0.9.1"]]
   :jvm-opts ["-Dclojure.server.repl={:port 5555 :accept clojure.core.server/repl}"]
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
