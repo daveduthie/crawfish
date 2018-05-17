@@ -125,7 +125,7 @@
   "Takes a URL and a site-root, and returns a set of outgoing links."
   [url site-root]
   ;; TODO: experiment with callback API
-  (try 
+  (try
     (-> @(kit/get url {:as :stream})
         :body
         (xform-html (comp (remove page-internal?)
@@ -254,10 +254,11 @@
   or displays an equivalent Swing window."
   [site-root & [{:keys [display parallelism log-level timeout]
                  :or   {display :tree, timeout 5000}}]]
-  (let [site-root ((absolutise "http:/") site-root)]
-    (case display
-      :tree (show-tree! (process-all site-root parallelism timeout))
-      :edn  (pprint (->tree (process-all site-root parallelism timeout))))))
+  (binding [*log-level* log-level]
+    (let [site-root ((absolutise "http:/") site-root)]
+      (case display
+        :tree (show-tree! (process-all site-root parallelism timeout))
+        :edn  (pprint (->tree (process-all site-root parallelism timeout)))))))
 
 ;; # CLI options
 

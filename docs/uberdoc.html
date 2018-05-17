@@ -2940,7 +2940,7 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(defn interpret-relative-links
   [s]
   (let [interp (str/replace s #&quot;/\w+/../&quot; &quot;/&quot;)]
-    (if (re-find #&quot;\.\.&quot; interp)
+    (if (and (not= interp s) (re-find #&quot;\.\.&quot; interp))
       (interpret-relative-links interp)
       interp)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn absolutise [root]
@@ -2965,7 +2965,7 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(defn outgoing-links
   [url site-root]
   ;; TODO: experiment with callback API
-  (try 
+  (try
     (-&gt; @(kit/get url {:as :stream})
         :body
         (xform-html (comp (remove page-internal?)
@@ -3071,10 +3071,11 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(defn scan
   [site-root &amp; [{:keys [display parallelism log-level timeout]
                  :or   {display :tree, timeout 5000}}]]
-  (let [site-root ((absolutise &quot;http:/&quot;) site-root)]
-    (case display
-      :tree (show-tree! (process-all site-root parallelism timeout))
-      :edn  (pprint (-&gt;tree (process-all site-root parallelism timeout))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
+  (binding [*log-level* log-level]
+    (let [site-root ((absolutise &quot;http:/&quot;) site-root)]
+      (case display
+        :tree (show-tree! (process-all site-root parallelism timeout))
+        :edn  (pprint (-&gt;tree (process-all site-root parallelism timeout)))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def cli-options
   [[&quot;-p&quot; &quot;--parallelism P&quot; &quot;Number of I/O threads to use&quot;
