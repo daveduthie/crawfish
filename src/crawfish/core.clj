@@ -9,7 +9,8 @@
    [net.cgrand.enlive-html :as enlive]
    [org.httpkit.client :as kit])
   (:import
-   [java.util.concurrent ConcurrentLinkedQueue])
+   [java.util.concurrent ConcurrentLinkedQueue]
+   [javax.swing JFrame])
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -246,7 +247,8 @@
   The hierarchy is guessed by splitting each URL into segments and treating the resulting
   sequence as a path from the root."
   [urls]
-  (inspect/inspect-tree (->tree urls)))
+  (doto ^JFrame (inspect/inspect-tree (->tree urls))
+    (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
 
 (defn scan
   "Accepts a configuration map as produced by `parse-opts`.
@@ -255,11 +257,12 @@
   [site-root & [{:keys [display parallelism log-level timeout]
                  :or   {display :edn, parallelism 8, log-level :info timeout 5000}}]]
   (binding [*log-level* log-level]
-    (let [site-root ((absolutise "http:/") site-root)]
+    (let [site-root ((absolutise "https:/") site-root)]
       (log :info :root site-root)
       (case display
         :tree (show-tree! (process-all site-root parallelism timeout))
-        :edn  (pprint (->tree (process-all site-root parallelism timeout)))))))
+        :edn  (do (pprint (->tree (process-all site-root parallelism timeout)))
+                  (System/exit 0))))))
 
 ;; # CLI options
 
