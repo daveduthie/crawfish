@@ -119,8 +119,21 @@
   (-> byte-stream
       enlive/html-resource
       (enlive/select [href-sel])
+      #_ (doto pprint)
       (->> (map #(get-in % [:attrs :href]))
            (into #{} xform))))
+
+(defn href-transducer
+  [site-root]
+  (comp (remove page-internal?)
+        (remove (external? site-root))
+        (remove mailto?)
+        (remove tel?)
+        (map strip-query-params)
+        (map interpret-relative-links)
+        (map strip-internal-links)
+        (map strip-trailing-slashes)
+        (map (absolutise site-root))))
 
 (defn outgoing-links
   "Takes a URL and a site-root, and returns a set of outgoing links."
@@ -129,15 +142,7 @@
   (try
     (-> @(kit/get url {:as :stream})
         :body
-        (xform-html (comp (remove page-internal?)
-                          (remove absolute?)
-                          (remove mailto?)
-                          (remove tel?)
-                          (map strip-query-params)
-                          (map strip-internal-links)
-                          (map strip-trailing-slashes)
-                          (map interpret-relative-links)
-                          (map (absolutise site-root)))))
+        (xform-html (href-transducer site-root)))
     (catch IllegalArgumentException e
       (log :warn (format "failed to fetch %s" url)))))
 
@@ -237,7 +242,7 @@
     (re-queue returns work-q seen)
     (dotimes [i n]
       (proc site-root work-q returns ack seen))
-    (prn @(wait-for-ack ack seen timeout))
+    (log :info @(wait-for-ack ack seen timeout))
     @seen))
 
 ;; # Printing
@@ -278,7 +283,7 @@
    ["-t" "--timeout T" "Max milliseconds between ACKs"
     :default 10000
     :parse-fn #(Integer/parseInt %)
-    :validate [#(< 500 % 20000) "Must be a number between 500 and 20000"]]
+    :validate [#(<= 500 % 20000) "Must be a number between 500 and 20000"]]
    ["-d" "--display D" "Display type (tree or EDN)"
     :default :edn
     :parse-fn keyword
