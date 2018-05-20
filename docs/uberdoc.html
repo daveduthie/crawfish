@@ -2878,7 +2878,8 @@ net.brehaut.ClojureTools = (function (SH) {
    [net.cgrand.enlive-html :as enlive]
    [org.httpkit.client :as kit])
   (:import
-   [java.util.concurrent ConcurrentLinkedQueue])
+   [java.util.concurrent ConcurrentLinkedQueue]
+   [javax.swing JFrame])
   (:gen-class))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(set! *warn-on-reflection* true)</pre></td></tr><tr><td class="docs"><p>REPL use only</p>
 </td><td class="codes"><pre class="brush: clojure">(comment
@@ -2888,7 +2889,7 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def logger (agent nil))
 (def levels {:debug 0 :info 1 :warn 2 :error 3 :fatal 4})
-(def ^:dynamic *log-level* :info)</pre></td></tr><tr><td class="docs">
+(def ^:dynamic *log-level* :warn)</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn log [level &amp; msgs]
   (when (&gt;= (levels level 0) (levels *log-level* 2))
     (send logger (fn [_] (apply println msgs)))))</pre></td></tr><tr><td class="docs">
@@ -2896,8 +2897,7 @@ net.brehaut.ClojureTools = (function (SH) {
   [condition val]
   (when-not (condition val)
     (throw (ex-info &quot;failed&quot; {:condition condition
-                              :value     val
-                              :type      type}))))</pre></td></tr><tr><td class="docs"><h1>Parsing</h1>
+                              :value     val}))))</pre></td></tr><tr><td class="docs"><h1>Parsing</h1>
 </td><td class="codes"></td></tr><tr><td class="docs"><h2>Helpers</h2>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn page-internal?
@@ -2960,23 +2960,27 @@ net.brehaut.ClojureTools = (function (SH) {
   (-&gt; byte-stream
       enlive/html-resource
       (enlive/select [href-sel])
+      #_ (doto pprint)
       (-&gt;&gt; (map #(get-in % [:attrs :href]))
-           (into #{} xform))))</pre></td></tr><tr><td class="docs"><p>Takes a URL and a site-root, and returns a set of outgoing links.</p>
+           (into #{} xform))))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn href-transducer
+  [site-root]
+  (comp (remove page-internal?)
+        (remove (external? site-root))
+        (remove mailto?)
+        (remove tel?)
+        (map strip-query-params)
+        (map interpret-relative-links)
+        (map strip-internal-links)
+        (map strip-trailing-slashes)
+        (map (absolutise site-root))))</pre></td></tr><tr><td class="docs"><p>Takes a URL and a site-root, and returns a set of outgoing links.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn outgoing-links
   [url site-root]
   ;; TODO: experiment with callback API
   (try
     (-&gt; @(kit/get url {:as :stream})
         :body
-        (xform-html (comp (remove page-internal?)
-                          (remove absolute?)
-                          (remove mailto?)
-                          (remove tel?)
-                          (map strip-query-params)
-                          (map strip-internal-links)
-                          (map strip-trailing-slashes)
-                          (map interpret-relative-links)
-                          (map (absolutise site-root)))))
+        (xform-html (href-transducer site-root)))
     (catch IllegalArgumentException e
       (log :warn (format &quot;failed to fetch %s&quot; url)))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
@@ -3032,8 +3036,7 @@ net.brehaut.ClojureTools = (function (SH) {
                         (remove (conj @seen url)))]
           #_ (dosync (commute seen into urls)) ; moved this logic to control
           (log :debug :proc/attempt-to-return url &quot;-&gt;&quot; (count urls))
-          (async/onto-chan returns urls false) ; TODO: bring me back
-          ;; (doseq [u urls] (&gt;!! returns u))
+          (async/onto-chan returns urls false)
           ;; Confirm url has been processed
           (&gt;!! ack url)))
       (recur))))</pre></td></tr><tr><td class="docs"><h1>Wiring</h1>
@@ -3058,25 +3061,27 @@ net.brehaut.ClojureTools = (function (SH) {
     (re-queue returns work-q seen)
     (dotimes [i n]
       (proc site-root work-q returns ack seen))
-    (prn @(wait-for-ack ack seen timeout))
+    (log :info @(wait-for-ack ack seen timeout))
     @seen))</pre></td></tr><tr><td class="docs"><h1>Printing</h1>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
   The hierarchy is guessed by splitting each URL into segments and treating the resulting
   sequence as a path from the root.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn show-tree!
   [urls]
-  (inspect/inspect-tree (-&gt;tree urls)))</pre></td></tr><tr><td class="docs"><p>Accepts a configuration map as produced by <code>parse-opts</code>.
+  (doto ^JFrame (inspect/inspect-tree (-&gt;tree urls))
+    (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))</pre></td></tr><tr><td class="docs"><p>Accepts a configuration map as produced by <code>parse-opts</code>.
   Depending on <code>:display</code> key, either prints site map to STDOUT
   or displays an equivalent Swing window.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn scan
   [site-root &amp; [{:keys [display parallelism log-level timeout]
                  :or   {display :edn, parallelism 8, log-level :info timeout 5000}}]]
   (binding [*log-level* log-level]
-    (let [site-root ((absolutise &quot;http:/&quot;) site-root)]
+    (let [site-root ((absolutise &quot;https:/&quot;) site-root)]
       (log :info :root site-root)
       (case display
         :tree (show-tree! (process-all site-root parallelism timeout))
-        :edn  (pprint (-&gt;tree (process-all site-root parallelism timeout)))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
+        :edn  (do (pprint (-&gt;tree (process-all site-root parallelism timeout)))
+                  (System/exit 0))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def cli-options
   [[&quot;-p&quot; &quot;--parallelism P&quot; &quot;Number of I/O threads to use&quot;
@@ -3090,7 +3095,7 @@ net.brehaut.ClojureTools = (function (SH) {
    [&quot;-t&quot; &quot;--timeout T&quot; &quot;Max milliseconds between ACKs&quot;
     :default 10000
     :parse-fn #(Integer/parseInt %)
-    :validate [#(&lt; 500 % 20000) &quot;Must be a number between 500 and 20000&quot;]]
+    :validate [#(&lt;= 500 % 20000) &quot;Must be a number between 500 and 20000&quot;]]
    [&quot;-d&quot; &quot;--display D&quot; &quot;Display type (tree or EDN)&quot;
     :default :edn
     :parse-fn keyword

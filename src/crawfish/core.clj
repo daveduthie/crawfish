@@ -26,7 +26,7 @@
 
 (def logger (agent nil))
 (def levels {:debug 0 :info 1 :warn 2 :error 3 :fatal 4})
-(def ^:dynamic *log-level* :info)
+(def ^:dynamic *log-level* :warn)
 
 (defn log [level & msgs]
   (when (>= (levels level 0) (levels *log-level* 2))
@@ -36,8 +36,7 @@
   [condition val]
   (when-not (condition val)
     (throw (ex-info "failed" {:condition condition
-                              :value     val
-                              :type      type}))))
+                              :value     val}))))
 
 ;; # Parsing
 
@@ -211,8 +210,7 @@
                         (remove (conj @seen url)))]
           #_ (dosync (commute seen into urls)) ; moved this logic to control
           (log :debug :proc/attempt-to-return url "->" (count urls))
-          (async/onto-chan returns urls false) ; TODO: bring me back
-          ;; (doseq [u urls] (>!! returns u))
+          (async/onto-chan returns urls false)
           ;; Confirm url has been processed
           (>!! ack url)))
       (recur))))
