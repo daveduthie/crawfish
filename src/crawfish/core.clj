@@ -115,12 +115,13 @@
   "Takes a byte stream representing an HTML page and a transducer to apply to the sequence of URLs found.
   Returns a set of outgoing links."
   [byte-stream xform]
-  (-> byte-stream
-      enlive/html-resource
-      (enlive/select [href-sel])
-      #_ (doto pprint)
-      (->> (map #(get-in % [:attrs :href]))
-           (into #{} xform))))
+  (when byte-stream
+    (-> byte-stream
+        enlive/html-resource
+        (enlive/select [href-sel])
+        #_ (doto pprint)
+        (->> (map #(get-in % [:attrs :href]))
+             (into #{} xform)))))
 
 (defn href-transducer
   [site-root]
@@ -136,12 +137,20 @@
 
 (defn outgoing-links
   "Takes a URL and a site-root, and returns a set of outgoing links."
-  [url site-root]
+  [url site-root returns ack]
   ;; TODO: experiment with callback API
+  (kit/get url
+           {:as :stream}
+           (fn [res]
+             (let [urls (-> res
+                            :body
+                            (xform-html (href-transducer site-root)))]
+               (doseq [u urls]
+                 (when u (>!! returns u)))
+               (>!! ack url))))
+  #_
   (try
-    (-> @(kit/get url {:as :stream})
-        :body
-        (xform-html (href-transducer site-root)))
+    ;; stuff
     (catch IllegalArgumentException e
       (log :warn (format "failed to fetch %s" url)))))
 
@@ -206,13 +215,15 @@
     (loop []
       (when-let [url (.poll work-q)]
         (let [_    (log :debug :proc/got url)
-              urls (->> (outgoing-links url site-root)
-                        (remove (conj @seen url)))]
+              #_urls #_(->> (outgoing-links url site-root)
+                            (remove (conj @seen url)))]
+          (outgoing-links url site-root returns ack)
           #_ (dosync (commute seen into urls)) ; moved this logic to control
-          (log :debug :proc/attempt-to-return url "->" (count urls))
-          (async/onto-chan returns urls false)
+          ;; (log :debug :proc/attempt-to-return url "->" (count urls))
+          ;; (async/onto-chan returns urls false)
           ;; Confirm url has been processed
-          (>!! ack url)))
+          ;; (>!! ack url)
+          ))
       (recur))))
 
 ;; # Wiring
