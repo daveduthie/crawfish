@@ -2956,7 +2956,7 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Takes a byte stream representing an HTML page and a transducer to apply to the sequence of URLs found.
   Returns a set of outgoing links.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn xform-html
-  [byte-stream xform]
+  [xform byte-stream]
   (when byte-stream
     (-&gt; byte-stream
         enlive/html-resource
@@ -2976,16 +2976,16 @@ net.brehaut.ClojureTools = (function (SH) {
         (map strip-trailing-slashes)
         (map (absolutise site-root))))</pre></td></tr><tr><td class="docs"><p>Takes a URL and a site-root, and returns a set of outgoing links.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn outgoing-links
-  [url site-root returns]
+  [url site-root results]
   (kit/get url
            {:as :stream}
            (fn [res]
-             (let [urls (try (-&gt; res
-                                 :body
-                                 (xform-html (href-transducer site-root)))
-                             (catch Exception e
-                               (log :warn (format &quot;failed to fetch %s&quot; url))))]
-               (async/onto-chan returns urls)))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>
+             (try (-&gt;&gt; res
+                       :body
+                       (xform-html (href-transducer site-root))
+                       (async/onto-chan results))
+                  (catch Exception e
+                    (log :warn (format &quot;failed to fetch %s&quot; url)))))))</pre></td></tr><tr><td class="docs"><h1>Hierarchical (tree) representation</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def sep #&quot;/&quot;)</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn tokenise

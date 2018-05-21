@@ -114,7 +114,7 @@
 (defn xform-html
   "Takes a byte stream representing an HTML page and a transducer to apply to the sequence of URLs found.
   Returns a set of outgoing links."
-  [byte-stream xform]
+  [xform byte-stream]
   (when byte-stream
     (-> byte-stream
         enlive/html-resource
@@ -137,16 +137,16 @@
 
 (defn outgoing-links
   "Takes a URL and a site-root, and returns a set of outgoing links."
-  [url site-root returns]
+  [url site-root results]
   (kit/get url
            {:as :stream}
            (fn [res]
-             (let [urls (try (-> res
-                                 :body
-                                 (xform-html (href-transducer site-root)))
-                             (catch Exception e
-                               (log :warn (format "failed to fetch %s" url))))]
-               (async/onto-chan returns urls)))))
+             (try (->> res
+                       :body
+                       (xform-html (href-transducer site-root))
+                       (async/onto-chan results))
+                  (catch Exception e
+                    (log :warn (format "failed to fetch %s" url)))))))
 
 ;; # Hierarchical (tree) representation
 

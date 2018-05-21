@@ -32,15 +32,7 @@
 
 (deftest transducer-test
   (let [site-root "http://foo.bar"
-        xform     (href-transducer site-root) #_ (comp (remove page-internal?)
-                                                       (remove absolute?)
-                                                       (remove mailto?)
-                                                       (remove tel?)
-                                                       (map strip-query-params)
-                                                       (map strip-internal-links)
-                                                       (map strip-trailing-slashes)
-                                                       (map interpret-relative-links)
-                                                       (map (absolutise site-root)))
+        xform     (href-transducer site-root)
         urls      ["http://remove.me.bar"
                    "/a"
                    "/b/"
@@ -300,13 +292,7 @@
                     "https://daveduthie.github.io/resume.pdf"
                     "https://daveduthie.github.io/resume.html"}]
     (is (= datum
-           (xform-html stream
-                       (comp (remove (external? site-root))
-                             (remove mailto?)
-                             (remove tel?)
-                             (remove page-internal?)
-                             (map strip-query-params)
-                             (map (absolutise site-root))))))))
+           (xform-html (href-transducer site-root) stream)))))
 
 (deftest ->tree-test
   (let [links #{"https://foo.github.io/static/images/favicon.png"
