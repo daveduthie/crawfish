@@ -137,22 +137,16 @@
 
 (defn outgoing-links
   "Takes a URL and a site-root, and returns a set of outgoing links."
-  [url site-root returns ack]
-  ;; TODO: experiment with callback API
+  [url site-root returns]
   (kit/get url
            {:as :stream}
            (fn [res]
-             (let [urls (-> res
-                            :body
-                            (xform-html (href-transducer site-root)))]
-               (doseq [u urls]
-                 (when u (>!! returns u)))
-               (>!! ack url))))
-  #_
-  (try
-    ;; stuff
-    (catch IllegalArgumentException e
-      (log :warn (format "failed to fetch %s" url)))))
+             (let [urls (try (-> res
+                                 :body
+                                 (xform-html (href-transducer site-root)))
+                             (catch Exception e
+                               (log :warn (format "failed to fetch %s" url))))]
+               (async/onto-chan returns urls)))))
 
 ;; # Hierarchical (tree) representation
 
@@ -214,16 +208,13 @@
   (async/thread ; will block on I/O
     (loop []
       (when-let [url (.poll work-q)]
-        (let [_    (log :debug :proc/got url)
-              #_urls #_(->> (outgoing-links url site-root)
-                            (remove (conj @seen url)))]
-          (outgoing-links url site-root returns ack)
-          #_ (dosync (commute seen into urls)) ; moved this logic to control
-          ;; (log :debug :proc/attempt-to-return url "->" (count urls))
-          ;; (async/onto-chan returns urls false)
-          ;; Confirm url has been processed
-          ;; (>!! ack url)
-          ))
+        (let [results (chan)]
+          (log :debug :proc/got url)
+          (outgoing-links url site-root results)
+          (go-loop []
+            (if-let [out-url (<! results)]
+              (do (>! returns out-url) (recur))
+              (>! ack url)))))
       (recur))))
 
 ;; # Wiring
