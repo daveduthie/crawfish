@@ -2937,6 +2937,9 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(defn strip-trailing-slashes
   [s]
   (str/replace s #&quot;/+$&quot; ))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn strip-whitespace
+  [s]
+  (str/trim s))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn interpret-relative-links
   [s]
   (let [interp (str/replace s #&quot;/\w+/../&quot; &quot;/&quot;)]
@@ -2961,12 +2964,12 @@ net.brehaut.ClojureTools = (function (SH) {
     (-&gt; byte-stream
         enlive/html-resource
         (enlive/select [href-sel])
-        #_ (doto pprint)
         (-&gt;&gt; (map #(get-in % [:attrs :href]))
              (into #{} xform)))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn href-transducer
   [site-root]
-  (comp (remove page-internal?)
+  (comp (map strip-whitespace)
+        (remove page-internal?)
         (remove (external? site-root))
         (remove mailto?)
         (remove tel?)
@@ -2974,6 +2977,7 @@ net.brehaut.ClojureTools = (function (SH) {
         (map interpret-relative-links)
         (map strip-internal-links)
         (map strip-trailing-slashes)
+        (remove empty?)
         (map (absolutise site-root))))</pre></td></tr><tr><td class="docs"><p>Takes a URL and a site-root, and returns a set of outgoing links.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn outgoing-links
   [url site-root results]

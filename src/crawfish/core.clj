@@ -90,6 +90,10 @@
   [s]
   (str/replace s #"/+$" ""))
 
+(defn strip-whitespace
+  [s]
+  (str/trim s))
+
 (defn interpret-relative-links
   [s]
   (let [interp (str/replace s #"/\w+/../" "/")]
@@ -119,13 +123,13 @@
     (-> byte-stream
         enlive/html-resource
         (enlive/select [href-sel])
-        #_ (doto pprint)
         (->> (map #(get-in % [:attrs :href]))
              (into #{} xform)))))
 
 (defn href-transducer
   [site-root]
-  (comp (remove page-internal?)
+  (comp (map strip-whitespace)
+        (remove page-internal?)
         (remove (external? site-root))
         (remove mailto?)
         (remove tel?)
@@ -133,6 +137,7 @@
         (map interpret-relative-links)
         (map strip-internal-links)
         (map strip-trailing-slashes)
+        (remove empty?)
         (map (absolutise site-root))))
 
 (defn outgoing-links
