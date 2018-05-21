@@ -3005,8 +3005,6 @@ net.brehaut.ClojureTools = (function (SH) {
   [returns ^ConcurrentLinkedQueue work-q seen]
   (go-loop []
     (let [url (&lt;! returns)]
-      (assert url)
-      (dosync (commute seen conj url))
       (.add work-q url) ; don't respect back-pressure here (need growing buffer *somewhere*)
       (recur))))</pre></td></tr><tr><td class="docs"><p>Keeps track of how many URLs have been seen. Blocks until all have been processed,
   or until <code>timeout</code> ms have elapsed between acks.</p>
@@ -3017,7 +3015,6 @@ net.brehaut.ClojureTools = (function (SH) {
         _    (go-loop [i 1]
                (log :debug :waiting-for-ack i)
                (let [[url port] (alts! [ack (async/timeout timeout)])]
-                 (log :debug :ack/url url :ack/port port)
                  (cond
                    (= i (count @seen)) (deliver gate {:acks/complete true
                                                       :acks/received i
@@ -3048,7 +3045,8 @@ net.brehaut.ClojureTools = (function (SH) {
   [seen]
   (comp (distinct)
         (map (fn [x]
-               (dosync (commute seen conj))
+               (dosync (commute seen conj x))
+               (log :debug &quot;Added &quot; x &quot; to seen&quot;)
                (log :debug :&lt;-----------returns x)
                x))))</pre></td></tr><tr><td class="docs"><p>Sets up some channels and worker threads, then kicks things off by pushing the site-root
   into the work-queue. Returns a set of all sites discovered.</p>
@@ -3058,32 +3056,34 @@ net.brehaut.ClojureTools = (function (SH) {
         work-q  (ConcurrentLinkedQueue.) ; Want an unbounded queue here to avoid deadlock.
         returns (chan 1 (returns-xform seen))
         ack     (chan 1 (map (fn [x] (log :debug :&lt;-----------ack x) x)))]
-    (dosync (commute seen conj site-root))
-    (.add work-q site-root)
-    (re-queue returns work-q seen)
+    (dotimes [i 10]
+      (re-queue returns work-q seen))
     (dotimes [i n]
       (proc site-root work-q returns ack seen))
+    (&gt;!! returns site-root)
     (log :info @(wait-for-ack ack seen timeout))
     @seen))</pre></td></tr><tr><td class="docs"><h1>Printing</h1>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
   The hierarchy is guessed by splitting each URL into segments and treating the resulting
   sequence as a path from the root.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn show-tree!
-  [urls]
-  (doto ^JFrame (inspect/inspect-tree (-&gt;tree urls))
-    (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))</pre></td></tr><tr><td class="docs"><p>Accepts a configuration map as produced by <code>parse-opts</code>.
+  [urls quit?]
+  (if quit?
+    (doto ^JFrame (inspect/inspect-tree (-&gt;tree urls))
+      (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE))
+    (inspect/inspect-tree (-&gt;tree urls))))</pre></td></tr><tr><td class="docs"><p>Accepts a configuration map as produced by <code>parse-opts</code>.
   Depending on <code>:display</code> key, either prints site map to STDOUT
   or displays an equivalent Swing window.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn scan
-  [site-root &amp; [{:keys [display parallelism log-level timeout]
-                 :or   {display :edn, parallelism 8, log-level :info timeout 5000}}]]
+  [site-root &amp; [{:keys [display parallelism log-level timeout quit?]
+                 :or   {display :edn, parallelism 8, log-level :info timeout 5000 quit? true}}]]
   (binding [*log-level* log-level]
     (let [site-root ((absolutise &quot;https:/&quot;) site-root)]
       (log :info :root site-root)
       (case display
-        :tree (show-tree! (process-all site-root parallelism timeout))
+        :tree (show-tree! (process-all site-root parallelism timeout) quit?)
         :edn  (do (pprint (-&gt;tree (process-all site-root parallelism timeout)))
-                  (System/exit 0))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
+                  (if quit? (System/exit 0)))))))</pre></td></tr><tr><td class="docs"><h1>CLI options</h1>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def cli-options
   [[&quot;-p&quot; &quot;--parallelism P&quot; &quot;Number of I/O threads to use&quot;

@@ -174,8 +174,6 @@
   [returns ^ConcurrentLinkedQueue work-q seen]
   (go-loop []
     (let [url (<! returns)]
-      (assert url)
-      (dosync (commute seen conj url))
       (.add work-q url) ; don't respect back-pressure here (need growing buffer *somewhere*)
       (recur))))
 
@@ -188,7 +186,6 @@
         _    (go-loop [i 1]
                (log :debug :waiting-for-ack i)
                (let [[url port] (alts! [ack (async/timeout timeout)])]
-                 (log :debug :ack/url url :ack/port port)
                  (cond
                    (= i (count @seen)) (deliver gate {:acks/complete true
                                                       :acks/received i
@@ -225,7 +222,8 @@
   [seen]
   (comp (distinct)
         (map (fn [x]
-               (dosync (commute seen conj))
+               (dosync (commute seen conj x))
+               (log :debug "Added " x " to seen")
                (log :debug :<-----------returns x)
                x))))
 
@@ -237,11 +235,11 @@
         work-q  (ConcurrentLinkedQueue.) ; Want an unbounded queue here to avoid deadlock.
         returns (chan 1 (returns-xform seen))
         ack     (chan 1 (map (fn [x] (log :debug :<-----------ack x) x)))]
-    (dosync (commute seen conj site-root))
-    (.add work-q site-root)
-    (re-queue returns work-q seen)
+    (dotimes [i 10]
+      (re-queue returns work-q seen))
     (dotimes [i n]
       (proc site-root work-q returns ack seen))
+    (>!! returns site-root)
     (log :info @(wait-for-ack ack seen timeout))
     @seen))
 
@@ -251,23 +249,25 @@
   "Takes a set of URLs and displays a swing window showing the URLs in a hierarchical view.
   The hierarchy is guessed by splitting each URL into segments and treating the resulting
   sequence as a path from the root."
-  [urls]
-  (doto ^JFrame (inspect/inspect-tree (->tree urls))
-    (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
+  [urls quit?]
+  (if quit?
+    (doto ^JFrame (inspect/inspect-tree (->tree urls))
+      (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE))
+    (inspect/inspect-tree (->tree urls))))
 
 (defn scan
   "Accepts a configuration map as produced by `parse-opts`.
   Depending on `:display` key, either prints site map to STDOUT
   or displays an equivalent Swing window."
-  [site-root & [{:keys [display parallelism log-level timeout]
-                 :or   {display :edn, parallelism 8, log-level :info timeout 5000}}]]
+  [site-root & [{:keys [display parallelism log-level timeout quit?]
+                 :or   {display :edn, parallelism 8, log-level :info timeout 5000 quit? true}}]]
   (binding [*log-level* log-level]
     (let [site-root ((absolutise "https:/") site-root)]
       (log :info :root site-root)
       (case display
-        :tree (show-tree! (process-all site-root parallelism timeout))
+        :tree (show-tree! (process-all site-root parallelism timeout) quit?)
         :edn  (do (pprint (->tree (process-all site-root parallelism timeout)))
-                  (System/exit 0))))))
+                  (if quit? (System/exit 0)))))))
 
 ;; # CLI options
 
