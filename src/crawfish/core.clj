@@ -284,7 +284,7 @@
   [["-p" "--parallelism P" "Number of I/O threads to use"
     :default 8
     :parse-fn #(Integer/parseInt %)
-    :validate [#(< 1 % 64) "Must be a number between 1 and 64"]]
+    :validate [#(<= 1 % 64) "Must be a number between 1 and 64"]]
    ["-l" "--log-level L" "Logging level"
     :default :info
     :parse-fn keyword
