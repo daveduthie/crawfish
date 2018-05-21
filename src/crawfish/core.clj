@@ -98,7 +98,7 @@
   [s]
   (let [interp (str/replace s #"/\w+/../" "/")]
     (if (and (not= interp s) (re-find #"\.\." interp))
-      (interpret-relative-links interp)
+      (recur interp)
       interp)))
 
 (defn absolutise [root]

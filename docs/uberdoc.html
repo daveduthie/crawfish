@@ -2944,7 +2944,7 @@ net.brehaut.ClojureTools = (function (SH) {
   [s]
   (let [interp (str/replace s #&quot;/\w+/../&quot; &quot;/&quot;)]
     (if (and (not= interp s) (re-find #&quot;\.\.&quot; interp))
-      (interpret-relative-links interp)
+      (recur interp)
       interp)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn absolutise [root]
   (fn [url]
